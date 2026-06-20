@@ -1,0 +1,12 @@
+{
+  "name": "relais-uwb",
+  "version": "1.0.0",
+  "description": "Relais UDP vers SSE pour la visualisation 3D du positionnement UWB DW3000",
+  "type": "commonjs",
+  "main": "relais.js",
+  "scripts": {
+    "start": "node relais.js",
+    "demo": "node simulateur_tag.js"
+  },
+  "license": "MIT"
+}
