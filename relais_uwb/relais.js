@@ -1,16 +1,16 @@
 'use strict';
 /*
  * ============================================================================
- *  Relais UWB — UDP -> SSE
+ *  UWB Relay — UDP -> SSE
  * ============================================================================
- *  Reçoit les datagrammes JSON du tag ESP32 sur un port UDP, les rediffuse
- *  aux navigateurs via un flux SSE (Server-Sent Events), et sert la page de
- *  visualisation 3D.
+ *  Receives JSON datagrams from the ESP32 tag on a UDP port, rebroadcasts
+ *  them to browsers via an SSE (Server-Sent Events) stream, and serves the
+ *  3D visualization page.
  *
- *  Node.js >= 16 — AUCUNE dépendance externe (modules natifs http + dgram).
+ *  Node.js >= 16 — NO external dependencies (native http + dgram modules).
  *
- *  Lancement :  node relais.js
- *  Puis ouvrir :  http://localhost:8090/
+ *  Launch:  node relais.js
+ *  Then open:  http://localhost:8090/
  * ============================================================================
  */
 const http  = require('http');
@@ -18,23 +18,23 @@ const dgram = require('dgram');
 const fs    = require('fs');
 const path  = require('path');
 
-const PORT_UDP  = Number(process.env.PORT_UDP)  || 8080;   // datagrammes du tag
-const PORT_HTTP = Number(process.env.PORT_HTTP) || 8090;   // navigateur (visu + flux)
+const PORT_UDP  = Number(process.env.PORT_UDP)  || 8080;   // tag datagrams
+const PORT_HTTP = Number(process.env.PORT_HTTP) || 8090;   // browser (visu + stream)
 const FICHIER_VISU = path.join(__dirname, '..', 'visualisation_3d_positionnement.html');
 
-// Navigateurs abonnés au flux SSE (objets « response » HTTP gardés ouverts)
+// Browsers subscribed to the SSE stream (HTTP "response" objects kept open)
 const clients = new Set();
 let nbMessages = 0;
 
 function diffuser(donnees) {
   const ligne = 'data: ' + JSON.stringify(donnees) + '\n\n';
   for (const c of clients) {
-    try { c.write(ligne); } catch (_) { /* client déconnecté */ }
+    try { c.write(ligne); } catch (_) { /* disconnected client */ }
   }
 }
 
 // ============================================================================
-//  Réception UDP — datagrammes envoyés par le ou les tag(s)
+//  UDP reception — datagrams sent by the tag(s)
 // ============================================================================
 const sock = dgram.createSocket('udp4');
 
@@ -48,9 +48,9 @@ sock.on('message', (buf, info) => {
     return;
   }
   nbMessages++;
-  msg.recu = Date.now();           // horodatage de réception côté relais
+  msg.recu = Date.now();           // reception timestamp on the relay side
   diffuser(msg);
-  if (nbMessages % 25 === 1) {     // trace allégée : 1 ligne sur 25
+  if (nbMessages % 25 === 1) {     // reduced trace: 1 line out of 25
     console.log('[UDP] ' + info.address + '  ' + texte
       + '   (' + clients.size + ' navigateur(s) connecté(s))');
   }
@@ -60,12 +60,12 @@ sock.on('error', (e) => console.error('[UDP] erreur : ' + e.message));
 sock.bind(PORT_UDP, () => console.log('[UDP]  écoute des datagrammes du tag sur le port ' + PORT_UDP));
 
 // ============================================================================
-//  Serveur HTTP — visualisation 3D + flux SSE
+//  HTTP server — 3D visualization + SSE stream
 // ============================================================================
 const serveur = http.createServer((req, res) => {
   const chemin = req.url.split('?')[0];
 
-  // --- Flux SSE temps réel ---
+  // --- Real-time SSE stream ---
   if (chemin === '/flux') {
     res.writeHead(200, {
       'Content-Type'                : 'text/event-stream',
@@ -84,7 +84,7 @@ const serveur = http.createServer((req, res) => {
     return;
   }
 
-  // --- État du relais (diagnostic) ---
+  // --- Relay state (diagnostics) ---
   if (chemin === '/sante') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -93,7 +93,7 @@ const serveur = http.createServer((req, res) => {
     return;
   }
 
-  // --- Visualisation 3D ---
+  // --- 3D visualization ---
   if (chemin === '/' || chemin === '/index.html'
       || chemin === '/visualisation_3d_positionnement.html') {
     fs.readFile(FICHIER_VISU, (err, data) => {
@@ -120,9 +120,9 @@ serveur.listen(PORT_HTTP, () => {
   console.log('En attente des datagrammes du tag…  (test sans matériel : node simulateur_tag.js)');
 });
 
-// Ping périodique pour maintenir les connexions SSE ouvertes
+// Periodic ping to keep the SSE connections open
 setInterval(() => {
   for (const c of clients) {
-    try { c.write(': ping\n\n'); } catch (_) { /* ignoré */ }
+    try { c.write(': ping\n\n'); } catch (_) { /* ignored */ }
   }
 }, 20000);

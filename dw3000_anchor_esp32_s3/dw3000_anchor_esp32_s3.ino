@@ -1,42 +1,42 @@
 /*
  * ============================================================================
- *  DW3000 UWB - ANCRE (repondeur DS-TWR, systeme multi-ancres)
- *  ESP32-DevKitC + module DWM3000
+ *  DW3000 UWB - ANCHOR (DS-TWR responder, multi-anchor system)
+ *  ESP32-DevKitC + DWM3000 module
  * ============================================================================
  *
- *  Sketch AUTONOME pour une ANCRE FIXE. Le systeme comporte 3 ancres
- *  (ID 1, 2, 3) qui repondent toutes au meme tag. Chaque ancre ne traite que
- *  les trames POLL qui portent SON identifiant : flasher les 3 ancres avec ce
- *  meme code, en changeant uniquement ANCHOR_ID.
+ *  STANDALONE sketch for a FIXED ANCHOR. The system has 3 anchors
+ *  (ID 1, 2, 3) that all respond to the same tag. Each anchor only processes
+ *  the POLL frames carrying ITS identifier: flash the 3 anchors with this
+ *  same code, changing only ANCHOR_ID.
  *
- *  >>> AVANT DE FLASHER : regler ANCHOR_ID ci-dessous (1, 2 ou 3) <<<
+ *  >>> BEFORE FLASHING: set ANCHOR_ID below (1, 2 or 3) <<<
  *
- *  Repere orthonorme (voir schema_positionnement_ancres.html) :
- *    A1 = origine (0,0,0) | A2 = axe X (Lx,0,0) | A3 = axe Y (0,Ly,0)
- *  Les positions des ancres sont configurees cote navigateur (visualisation).
+ *  Orthonormal frame (see schema_positionnement_ancres.html):
+ *    A1 = origin (0,0,0) | A2 = X axis (Lx,0,0) | A3 = Y axis (0,Ly,0)
+ *  Anchor positions are configured on the browser side (visualization).
  *
- *  Cablage ESP32 (voir schema_cablage_esp32.html) :
+ *  ESP32 wiring (see schema_cablage_esp32.html):
  *    GPIO18->CLK  GPIO23->MOSI  GPIO19->MISO  GPIO5->CS  GPIO27->IRQ  GPIO26->RST
- *    3.3V->VCC  GND->GND  -  condensateur 100 nF au plus pres du DWM3000
+ *    3.3V->VCC  GND->GND  -  100 nF capacitor as close as possible to the DWM3000
  *
- *  Protocole : DS-TWR (Double-Sided Two-Way Ranging), 4 trames par mesure.
- *  Bibliotheque : https://github.com/Makerfabs/Makerfabs-ESP32-UWB-DW3000
+ *  Protocol: DS-TWR (Double-Sided Two-Way Ranging), 4 frames per measurement.
+ *  Library: https://github.com/Makerfabs/Makerfabs-ESP32-UWB-DW3000
  * ============================================================================
  */
 
 #include <SPI.h>
 #include "dw3000.h"
 
-// Variables internes de dw3000_port.cpp pilotees directement (cf. firmware
-// dw3000_uwb_ranging : spiSelect() de la lib corrompt l'etat du DW3000).
+// Internal variables of dw3000_port.cpp driven directly (cf. firmware
+// dw3000_uwb_ranging: the lib's spiSelect() corrupts the DW3000 state).
 extern uint8_t _ss;
 extern uint8_t _rst;
 extern uint8_t _irq;
 
 // ============================================================================
-//  >>> CONFIGURATION - A REGLER POUR CHAQUE ANCRE <<<
+//  >>> CONFIGURATION - TO SET FOR EACH ANCHOR <<<
 // ============================================================================
-#define ANCHOR_ID   2        // Identifiant de CETTE ancre : 1, 2 ou 3
+#define ANCHOR_ID   2        // Identifier of THIS anchor: 1, 2 or 3
 
 // ============================================================================
 //  PINS ESP32
@@ -53,39 +53,39 @@ extern uint8_t _irq;
 // ============================================================================
 #define SPEED_OF_LIGHT          299702547.0   // m/s
 
-// Delai d'antenne - A CALIBRER (commande CALIB du firmware dw3000_uwb_ranging)
+// Antenna delay - TO CALIBRATE (CALIB command of firmware dw3000_uwb_ranging)
 #define TX_ANT_DLY              16385
 #define RX_ANT_DLY              16385
 
 #define POLL_RX_TO_RESP_TX_DLY  1500          // POLL RX -> RESPONSE TX (us)
-#define FINAL_RX_TIMEOUT        8000          // attente du FINAL (us)
+#define FINAL_RX_TIMEOUT        8000          // FINAL wait (us)
 
 // ============================================================================
-//  TRAMES UWB  -  l'octet [10] porte l'identifiant de l'ancre cible
+//  UWB FRAMES  -  byte [10] carries the target anchor identifier
 // ============================================================================
-#define MSG_SN_IDX          2     // numero de sequence
-#define MSG_FN_IDX          9     // code fonction
-#define MSG_ANCHOR_IDX      10    // identifiant d'ancre
+#define MSG_SN_IDX          2     // sequence number
+#define MSG_FN_IDX          9     // function code
+#define MSG_ANCHOR_IDX      10    // anchor identifier
 
 #define FN_POLL             0x21
 #define FN_RESP             0x10
 #define FN_FINAL            0x23
 #define FN_RESULT           0x11
 
-// Indices des 3 timestamps du Tag dans la trame FINAL
+// Indices of the 3 Tag timestamps in the FINAL frame
 #define FINAL_POLL_TX_IDX   11
 #define FINAL_RESP_RX_IDX   15
 #define FINAL_FINAL_TX_IDX  19
-// Index de la distance (float) dans la trame RESULT
+// Index of the distance (float) in the RESULT frame
 #define RESULT_DIST_IDX     11
 
-// RESPONSE : Ancre -> Tag
+// RESPONSE: Anchor -> Tag
 static uint8_t tx_resp_msg[] = {
     0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A',
     FN_RESP, ANCHOR_ID, 0x02, 0, 0
 };
 
-// RESULT : Ancre -> Tag (contient la distance calculee)
+// RESULT: Anchor -> Tag (contains the computed distance)
 static uint8_t tx_result_msg[] = {
     0x41, 0x88, 0, 0xCA, 0xDE, 'V', 'E', 'W', 'A',
     FN_RESULT, ANCHOR_ID, 0, 0, 0, 0, 0, 0
@@ -99,7 +99,7 @@ static uint32_t ranging_count = 0;
 static uint32_t error_count   = 0;
 
 // ============================================================================
-//  CONFIGURATION DW3000  (canal 5, 6.8 Mbps, PRF 64 MHz, STS off)
+//  DW3000 CONFIGURATION  (channel 5, 6.8 Mbps, PRF 64 MHz, STS off)
 // ============================================================================
 static dwt_config_t config = {
     5,                /* Channel 5 (6489.6 MHz) */
@@ -118,15 +118,15 @@ static dwt_config_t config = {
 };
 
 // ============================================================================
-//  FONCTIONS UTILITAIRES
+//  UTILITY FUNCTIONS
 // ============================================================================
 
 void log_msg(const char* msg) {
     Serial.printf("[ANCRE #%d] %s\n", ANCHOR_ID, msg);
 }
 
-/* Calcul de distance DS-TWR a partir des 6 timestamps (annule la derive
- * d'horloge). Identique au firmware dw3000_uwb_ranging. */
+/* DS-TWR distance computation from the 6 timestamps (cancels clock
+ * drift). Identical to firmware dw3000_uwb_ranging. */
 static double compute_distance_dstwr(uint64_t poll_tx_ts, uint64_t poll_rx_ts,
                                       uint64_t resp_tx_ts, uint64_t resp_rx_ts,
                                       uint64_t final_tx_ts, uint64_t final_rx_ts) {
@@ -158,12 +158,12 @@ void setup() {
 
     SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_CS);
 
-    // Memoriser les pins dans les globales internes de la lib
+    // Store the pins in the lib's internal globals
     _ss  = PIN_CS;
     _rst = PIN_RST;
     _irq = PIN_IRQ;
 
-    // Reset materiel DW3000 - RST open-drain : ne pas driver HIGH
+    // DW3000 hardware reset - RST open-drain: do not drive HIGH
     pinMode(PIN_RST, OUTPUT);
     digitalWrite(PIN_RST, LOW);
     delay(2);
@@ -201,7 +201,7 @@ void setup() {
     dwt_setrxantennadelay(RX_ANT_DLY);
     dwt_settxantennadelay(TX_ANT_DLY);
 
-    // L'ancre ecoute en continu (pas de timeout pour le POLL)
+    // The anchor listens continuously (no timeout for the POLL)
     dwt_setrxtimeout(0);
 
     log_msg("Ancre prete - en ecoute DS-TWR...");
@@ -209,15 +209,15 @@ void setup() {
 }
 
 // ============================================================================
-//  LOOP - Repondeur DS-TWR
-//   1. Ecouter -> recevoir un POLL adresse a CETTE ancre
-//   2. Envoyer RESPONSE (delayed)
-//   3. Attendre le FINAL
-//   4. Calculer la distance (6 timestamps)
-//   5. Envoyer RESULT au Tag
+//  LOOP - DS-TWR responder
+//   1. Listen -> receive a POLL addressed to THIS anchor
+//   2. Send RESPONSE (delayed)
+//   3. Wait for the FINAL
+//   4. Compute the distance (6 timestamps)
+//   5. Send RESULT to the Tag
 // ============================================================================
 void loop() {
-    // === 1. Activer le recepteur et attendre un POLL ===
+    // === 1. Enable the receiver and wait for a POLL ===
     dwt_setrxtimeout(0);
     dwt_rxenable(DWT_START_RX_IMMEDIATE);
 
@@ -225,7 +225,7 @@ void loop() {
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO |
               SYS_STATUS_ALL_RX_ERR))) {
-        // attente active
+        // active wait
     }
 
     if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
@@ -238,18 +238,18 @@ void loop() {
     if (frame_len > sizeof(rx_buffer)) return;
     dwt_readrxdata(rx_buffer, frame_len, 0);
 
-    // Filtrage : ne traiter que les POLL adresses a CETTE ancre
+    // Filtering: only process POLLs addressed to THIS anchor
     if (rx_buffer[MSG_FN_IDX] != FN_POLL) return;
-    if (rx_buffer[MSG_ANCHOR_IDX] != ANCHOR_ID) return;   // POLL pour une autre ancre
+    if (rx_buffer[MSG_ANCHOR_IDX] != ANCHOR_ID) return;   // POLL for another anchor
 
-    // === 2. Envoyer RESPONSE (delayed) ===
+    // === 2. Send RESPONSE (delayed) ===
     uint64_t poll_rx_ts = get_rx_timestamp_u64();
 
     uint32_t resp_tx_time = (poll_rx_ts +
         (POLL_RX_TO_RESP_TX_DLY * UUS_TO_DWT_TIME)) >> 8;
     dwt_setdelayedtrxtime(resp_tx_time);
 
-    // Timeout RX pour le FINAL (a configurer avant le starttx)
+    // RX timeout for the FINAL (to configure before the starttx)
     dwt_setrxtimeout(FINAL_RX_TIMEOUT);
 
     tx_resp_msg[MSG_SN_IDX]     = frame_seq_nb;
@@ -264,17 +264,17 @@ void loop() {
         return;
     }
 
-    // Attendre la fin du TX pour lire le timestamp TX reel de la RESPONSE
+    // Wait for the end of TX to read the real TX timestamp of the RESPONSE
     while (!(dwt_read32bitreg(SYS_STATUS_ID) & SYS_STATUS_TXFRS_BIT_MASK)) {}
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_TXFRS_BIT_MASK);
     uint64_t resp_tx_ts = get_tx_timestamp_u64();
 
-    // === 3. Attendre le FINAL ===
+    // === 3. Wait for the FINAL ===
     status_reg = 0;
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO |
               SYS_STATUS_ALL_RX_ERR))) {
-        // attente active
+        // active wait
     }
 
     if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
@@ -291,7 +291,7 @@ void loop() {
 
     if (rx_buffer[MSG_FN_IDX] != FN_FINAL) { frame_seq_nb++; return; }
 
-    // === 4. Calculer la distance DS-TWR ===
+    // === 4. Compute the DS-TWR distance ===
     uint64_t final_rx_ts = get_rx_timestamp_u64();
 
     uint32_t poll_tx_ts_32, resp_rx_ts_32, final_tx_ts_32;
@@ -314,7 +314,7 @@ void loop() {
         distance = -1.0;
     }
 
-    // === 5. Envoyer RESULT au Tag ===
+    // === 5. Send RESULT to the Tag ===
     float dist_float = (float)distance;
     memcpy(&tx_result_msg[RESULT_DIST_IDX], &dist_float, sizeof(float));
     tx_result_msg[MSG_SN_IDX]     = frame_seq_nb;

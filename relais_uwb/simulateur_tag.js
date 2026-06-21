@@ -1,14 +1,14 @@
 'use strict';
 /*
  * ============================================================================
- *  Simulateur de tag UWB
+ *  UWB tag simulator
  * ============================================================================
- *  Envoie au relais des datagrammes UDP factices, au même format que le vrai
- *  tag ESP32. Permet de tester toute la chaîne relais -> navigateur SANS
- *  matériel UWB.
+ *  Sends fake UDP datagrams to the relay, in the same format as the real
+ *  ESP32 tag. Allows testing the whole relay -> browser chain WITHOUT UWB
+ *  hardware.
  *
- *  Usage :  node simulateur_tag.js [hôte] [port]
- *           (défaut : 127.0.0.1 8080)
+ *  Usage:  node simulateur_tag.js [host] [port]
+ *          (default: 127.0.0.1 8080)
  * ============================================================================
  */
 const dgram = require('dgram');
@@ -16,18 +16,18 @@ const dgram = require('dgram');
 const HOTE = process.argv[2] || '127.0.0.1';
 const PORT = Number(process.argv[3]) || 8080;
 
-// Ancres : mêmes positions que le repère orthonormé de la visualisation 3D
+// Anchors: same positions as the orthonormal frame of the 3D visualization
 const ANCRES = [
-  { x: 0, y: 0, z: 0 },   // A1 — origine
-  { x: 6, y: 0, z: 0 },   // A2 — axe X
-  { x: 0, y: 5, z: 0 },   // A3 — axe Y
+  { x: 0, y: 0, z: 0 },   // A1 — origin
+  { x: 6, y: 0, z: 0 },   // A2 — X axis
+  { x: 0, y: 5, z: 0 },   // A3 — Y axis
 ];
-const BRUIT_M    = 0.012;   // écart-type du bruit de distance (m)
-const PERIODE_MS = 100;     // période d'émission (~10 Hz, comme le vrai tag)
+const BRUIT_M    = 0.012;   // standard deviation of the distance noise (m)
+const PERIODE_MS = 100;     // emission period (~10 Hz, like the real tag)
 
 const sock = dgram.createSocket('udp4');
 
-// Filtre moyenneur glissant par ancre — le vrai tag ESP32 lisse aussi les distances
+// Moving average filter per anchor — the real ESP32 tag also smooths the distances
 const TAILLE_FILTRE = 5;
 const filtres = ANCRES.map(() => []);
 function filtrer(idx, valeur) {
@@ -37,7 +37,7 @@ function filtrer(idx, valeur) {
   return f.reduce((s, v) => s + v, 0) / f.length;
 }
 
-// Bruit gaussien (Box-Muller)
+// Gaussian noise (Box-Muller)
 function gauss() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
@@ -51,18 +51,18 @@ console.log('[SIM] tag factice -> ' + HOTE + ':' + PORT + '   (Ctrl+C pour arrê
 setInterval(() => {
   t += PERIODE_MS / 1000;
 
-  // Trajectoire douce, à l'intérieur du triangle des ancres
+  // Smooth trajectory, inside the anchor triangle
   const p = {
     x: 2.00 + 1.05 * Math.sin(0.42 * t),
     y: 1.55 + 0.78 * Math.sin(0.29 * t + 1.1),
     z: 1.35 + 0.80 * Math.sin(0.21 * t + 0.6),
   };
 
-  // Distances vraies + bruit de mesure
+  // True distances + measurement noise
   const d = ANCRES.map((a, i) => {
     const vraie = Math.hypot(p.x - a.x, p.y - a.y, p.z - a.z);
     const brut  = vraie + gauss() * BRUIT_M;
-    return Math.round(filtrer(i, brut) * 1000) / 1000;   // moyenne glissante
+    return Math.round(filtrer(i, brut) * 1000) / 1000;   // moving average
   });
 
   const datagramme = JSON.stringify({ tag: 1, d: d, t: Date.now() });

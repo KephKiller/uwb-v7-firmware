@@ -1,50 +1,50 @@
-# UWB V7 — Firmware Arduino/ESP32 (DWM3000, DS-TWR)
+# UWB V7 — Arduino/ESP32 firmware (DWM3000, DS-TWR)
 
-Firmware open-source du projet **UWB V7** : positionnement indoor centimétrique par
-**DS-TWR** (Double-Sided Two-Way Ranging) avec le module **Qorvo DWM3000**.
+Open-source firmware for the **UWB V7** project: centimetre-grade indoor positioning via
+**DS-TWR** (Double-Sided Two-Way Ranging) with the **Qorvo DWM3000** module.
 
-Site du projet : https://effervescent-baklava-5bfaf4.netlify.app/
+Project site: https://effervescent-baklava-5bfaf4.netlify.app/
 
-## Contenu
+## Contents
 
-| Dossier / fichier | Rôle |
+| Folder / file | Role |
 |---|---|
-| `dw3000_anchor/` | Firmware **ANCRE** (ESP32-DevKitC). Répondeur DS-TWR. Flasher 3 ancres en changeant `ANCHOR_ID` (1, 2, 3). |
-| `dw3000_anchor_esp32_s3/` | Variante **ANCRE pour ESP32-S3**. |
-| `dw3000_tag_esp32/` | Firmware **TAG** mobile (ESP32-DevKitC). Interroge les 3 ancres, envoie les distances en WiFi/UDP. |
-| `dw3000_uwb_ranging/` | Démo **TWR combinée** (ancre + tag dans un seul sketch), pédagogique. |
-| `dw3000_trilat.h` | Module optionnel : filtre moyenneur, calibration d'antenne, trilatération + WiFi/UDP. |
-| `relais_uwb/` | Relais **Node.js** UDP→SSE (passerelle tag → navigateur) + simulateur de tag. |
+| `dw3000_anchor/` | **ANCHOR** firmware (ESP32-DevKitC). DS-TWR responder. Flash 3 anchors, changing `ANCHOR_ID` (1, 2, 3). |
+| `dw3000_anchor_esp32_s3/` | **ANCHOR for ESP32-S3** variant. |
+| `dw3000_tag_esp32/` | Mobile **TAG** firmware (ESP32-DevKitC). Polls the 3 anchors, sends distances over WiFi/UDP. |
+| `dw3000_uwb_ranging/` | Combined **TWR demo** (anchor + tag in a single sketch), educational. |
+| `dw3000_trilat.h` | Optional module: moving-average filter, antenna calibration, trilateration + WiFi/UDP. |
+| `relais_uwb/` | **Node.js** UDP→SSE relay (tag → browser gateway) + tag simulator. |
 
-## Prérequis
+## Requirements
 
-1. **Arduino IDE** avec le support carte **ESP32** (Espressif).
-2. **Bibliothèque Makerfabs DW3000** à installer :
+1. **Arduino IDE** with **ESP32** board support (Espressif).
+2. **Makerfabs DW3000** library to install:
    https://github.com/Makerfabs/Makerfabs-ESP32-UWB-DW3000
-   (les sketches font `#include "dw3000.h"` — cette bibliothèque n'est pas incluse ici).
+   (the sketches `#include "dw3000.h"` — this library is not included here).
 
-## Câblage (ESP32-DevKitC)
+## Wiring (ESP32-DevKitC)
 
 ```
 GPIO18 → CLK   GPIO23 → MOSI   GPIO19 → MISO   GPIO5 → CS   GPIO27 → IRQ   GPIO26 → RST
-3.3V → VCC     GND → GND       (condensateur 100 nF au plus près du DWM3000)
+3.3V → VCC     GND → GND       (100 nF capacitor as close as possible to the DWM3000)
 ```
-Schémas détaillés (ESP32, ESP32-S3, NodeMCU, Mega) sur le site, section **Ressources**.
+Detailed diagrams (ESP32, ESP32-S3, NodeMCU, Mega) on the site, **Resources** section.
 
 ## Configuration
 
-- **Ancre** : régler `ANCHOR_ID` (1, 2 ou 3) avant de flasher chaque ancre.
-- **Tag** : renseigner `WIFI_SSID`, `WIFI_PASSWORD` et `RELAY_IP` (IP du PC exécutant
-  `relais_uwb/relais.js`) — **les valeurs livrées sont des placeholders**.
+- **Anchor**: set `ANCHOR_ID` (1, 2 or 3) before flashing each anchor.
+- **Tag**: fill in `WIFI_SSID`, `WIFI_PASSWORD` and `RELAY_IP` (IP of the PC running
+  `relais_uwb/relais.js`) — **the shipped values are placeholders**.
 
-## Chaîne temps réel (optionnelle)
+## Real-time chain (optional)
 
 ```
-Tag (ESP32) --WiFi/UDP--> relais_uwb/relais.js --SSE--> visualiseur 3D (navigateur)
+Tag (ESP32) --WiFi/UDP--> relais_uwb/relais.js --SSE--> 3D viewer (browser)
 ```
-Lancer le relais : `cd relais_uwb && node relais.js` (UDP 8080, HTTP 8090, sans dépendances).
-Sans matériel : `node simulateur_tag.js` émet des trames factices.
+Start the relay: `cd relais_uwb && node relais.js` (UDP 8080, HTTP 8090, no dependencies).
+Without hardware: `node simulateur_tag.js` emits dummy frames.
 
-## Licence
+## License
 
-MIT — voir [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

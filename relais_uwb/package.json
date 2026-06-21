@@ -1,7 +1,7 @@
 {
   "name": "relais-uwb",
   "version": "1.0.0",
-  "description": "Relais UDP vers SSE pour la visualisation 3D du positionnement UWB DW3000",
+  "description": "UDP to SSE relay for the 3D visualization of DW3000 UWB positioning",
   "type": "commonjs",
   "main": "relais.js",
   "scripts": {

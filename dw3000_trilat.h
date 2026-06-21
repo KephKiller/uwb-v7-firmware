@@ -1,16 +1,16 @@
 /*
  * ============================================================================
- *  DW3000 UWB - Module de Trilatération & Calibration
- *  Fichier complémentaire pour le positionnement 2D/3D
+ *  DW3000 UWB - Trilateration & Calibration Module
+ *  Companion file for 2D/3D positioning
  * ============================================================================
- *  
- *  Ce fichier contient :
- *  - Filtre moyenneur glissant pour lisser les distances
- *  - Calibration du délai d'antenne
- *  - Trilatération 2D à partir de 3+ ancres
- *  - Communication WiFi pour envoyer la position
- *  
- *  À inclure dans le sketch principal (mode TAG uniquement)
+ *
+ *  This file contains:
+ *  - Moving average filter to smooth distances
+ *  - Antenna delay calibration
+ *  - 2D trilateration from 3+ anchors
+ *  - WiFi communication to send the position
+ *
+ *  To be included in the main sketch (TAG mode only)
  * ============================================================================
  */
 
@@ -21,48 +21,48 @@
 #include <math.h>
 
 // ============================================================================
-//  CONFIGURATION RÉSEAU
+//  NETWORK CONFIGURATION
 // ============================================================================
 
-// WiFi (pour envoyer les positions à un serveur)
+// WiFi (to send positions to a server)
 #define WIFI_SSID        "TON_SSID"
 #define WIFI_PASSWORD    "TON_PASSWORD"
 #define SERVER_IP        "192.168.1.100"
 #define SERVER_PORT      8080
 
 // ============================================================================
-//  CONFIGURATION DES ANCRES
+//  ANCHOR CONFIGURATION
 // ============================================================================
 
 #define MAX_ANCHORS 8
 #define MIN_ANCHORS_FOR_2D 3
 #define MIN_ANCHORS_FOR_3D 4
 
-// Position des ancres (à mesurer et renseigner avec précision !)
-// Coordonnées en mètres par rapport à un point d'origine
+// Anchor positions (measure and fill in precisely!)
+// Coordinates in meters relative to an origin point
 typedef struct {
-    uint8_t   id;           // Identifiant de l'ancre
-    uint16_t  address;      // Adresse UWB
+    uint8_t   id;           // Anchor identifier
+    uint16_t  address;      // UWB address
     float     x, y, z;     // Position (m)
-    float     last_dist;    // Dernière distance mesurée
-    bool      active;       // Ancre disponible ?
-    uint32_t  last_seen;    // Dernier contact (ms)
+    float     last_dist;    // Last measured distance
+    bool      active;       // Anchor available?
+    uint32_t  last_seen;    // Last contact (ms)
 } anchor_t;
 
-// Exemple : 4 ancres dans une pièce de 5m x 5m
+// Example: 4 anchors in a 5m x 5m room
 static anchor_t anchors[MAX_ANCHORS] = {
-    { 0x01, 0x0001, 0.0f, 0.0f, 0.0f, 0.0f, false, 0 },  // Coin origine
-    { 0x02, 0x0002, 5.0f, 0.0f, 0.0f, 0.0f, false, 0 },  // Coin X
-    { 0x03, 0x0003, 5.0f, 5.0f, 0.0f, 0.0f, false, 0 },  // Coin XY
-    { 0x04, 0x0004, 0.0f, 5.0f, 0.0f, 0.0f, false, 0 },  // Coin Y
+    { 0x01, 0x0001, 0.0f, 0.0f, 0.0f, 0.0f, false, 0 },  // Origin corner
+    { 0x02, 0x0002, 5.0f, 0.0f, 0.0f, 0.0f, false, 0 },  // X corner
+    { 0x03, 0x0003, 5.0f, 5.0f, 0.0f, 0.0f, false, 0 },  // XY corner
+    { 0x04, 0x0004, 0.0f, 5.0f, 0.0f, 0.0f, false, 0 },  // Y corner
 };
 static int num_anchors = 4;
 
 // ============================================================================
-//  FILTRE MOYENNEUR GLISSANT
+//  MOVING AVERAGE FILTER
 // ============================================================================
 
-#define FILTER_SIZE 5  // Nombre d'échantillons pour la moyenne
+#define FILTER_SIZE 5  // Number of samples for the average
 
 typedef struct {
     float   samples[FILTER_SIZE];
@@ -79,12 +79,12 @@ void filter_init(moving_avg_t* f) {
 }
 
 float filter_update(moving_avg_t* f, float new_value) {
-    // Retirer l'ancien échantillon de la somme
+    // Remove the oldest sample from the sum
     if (f->count >= FILTER_SIZE) {
         f->sum -= f->samples[f->index];
     }
-    
-    // Ajouter le nouvel échantillon
+
+    // Add the new sample
     f->samples[f->index] = new_value;
     f->sum += new_value;
     
@@ -94,30 +94,30 @@ float filter_update(moving_avg_t* f, float new_value) {
     return f->sum / f->count;
 }
 
-// Un filtre par ancre
+// One filter per anchor
 static moving_avg_t dist_filters[MAX_ANCHORS];
 
 // ============================================================================
-//  CALIBRATION DU DÉLAI D'ANTENNE
+//  ANTENNA DELAY CALIBRATION
 // ============================================================================
 
 /*
- * Procédure de calibration :
- * 1. Placer le tag à une distance CONNUE d'une ancre (ex: 2.00 m)
- * 2. Appeler calibrate_antenna_delay(2.0) 
- * 3. La fonction ajuste le délai d'antenne pour que la mesure 
- *    corresponde à la distance réelle
- * 4. Noter la valeur et la mettre dans TX_ANT_DLY / RX_ANT_DLY
+ * Calibration procedure:
+ * 1. Place the tag at a KNOWN distance from an anchor (e.g. 2.00 m)
+ * 2. Call calibrate_antenna_delay(2.0)
+ * 3. The function adjusts the antenna delay so that the measurement
+ *    matches the real distance
+ * 4. Note the value and put it in TX_ANT_DLY / RX_ANT_DLY
  */
 
-#define CALIB_SAMPLES 100  // Nombre de mesures pour la calibration
+#define CALIB_SAMPLES 100  // Number of measurements for the calibration
 
 typedef struct {
     bool     running;
-    float    known_distance;    // Distance réelle (m)
-    float    measured_sum;      // Somme des mesures
+    float    known_distance;    // Real distance (m)
+    float    measured_sum;      // Sum of measurements
     int      sample_count;
-    uint16_t best_delay;        // Résultat de la calibration
+    uint16_t best_delay;        // Calibration result
 } calibration_t;
 
 static calibration_t calib = { false, 0, 0, 0, 0 };
@@ -145,10 +145,10 @@ bool calibrate_add_sample(float measured_distance) {
     if (calib.sample_count >= CALIB_SAMPLES) {
         float avg_measured = calib.measured_sum / calib.sample_count;
         float error = avg_measured - calib.known_distance;
-        
-        // Convertir l'erreur en ticks de délai d'antenne
+
+        // Convert the error into antenna delay ticks
         // error_ticks = error_m / (c * DWT_TIME_UNITS)
-        // Divisé par 2 car le délai s'applique au TX et au RX
+        // Divided by 2 because the delay applies to both TX and RX
         float error_ticks = (error / (SPEED_OF_LIGHT * DWT_TIME_UNITS)) / 2.0;
         
         uint16_t current_delay = TX_ANT_DLY;
@@ -166,43 +166,43 @@ bool calibrate_add_sample(float measured_distance) {
         Serial.println("[CALIB] ========================\n");
         
         calib.running = false;
-        return true;  // Calibration terminée
+        return true;  // Calibration complete
     }
-    
-    return false;  // Pas encore fini
+
+    return false;  // Not finished yet
 }
 
 // ============================================================================
-//  TRILATÉRATION 2D
+//  2D TRILATERATION
 // ============================================================================
 
 typedef struct {
     float x, y;
-    float accuracy;   // Estimation de la précision (m)
+    float accuracy;   // Accuracy estimate (m)
     bool  valid;
 } position_2d_t;
 
 /*
- * Trilatération par moindres carrés (Least Squares)
- * Minimum 3 ancres avec des distances valides
- * 
- * Principe :
+ * Least Squares trilateration
+ * Minimum 3 anchors with valid distances
+ *
+ * Principle:
  * (x - x1)² + (y - y1)² = d1²
  * (x - x2)² + (y - y2)² = d2²
  * ...
- * Linéarisation par soustraction de la première équation
+ * Linearization by subtracting the first equation
  */
 position_2d_t trilaterate_2d(void) {
     position_2d_t pos = { 0, 0, 999, false };
-    
-    // Compter les ancres actives
+
+    // Count the active anchors
     int active_count = 0;
     int active_idx[MAX_ANCHORS];
-    
+
     for (int i = 0; i < num_anchors; i++) {
-        if (anchors[i].active && 
-            anchors[i].last_dist > 0 && 
-            (millis() - anchors[i].last_seen) < 2000) {  // Max 2s d'âge
+        if (anchors[i].active &&
+            anchors[i].last_dist > 0 &&
+            (millis() - anchors[i].last_seen) < 2000) {  // Max 2s age
             active_idx[active_count++] = i;
         }
     }
@@ -213,17 +213,17 @@ position_2d_t trilaterate_2d(void) {
         return pos;
     }
     
-    // Référence = première ancre active
+    // Reference = first active anchor
     int ref = active_idx[0];
     float x1 = anchors[ref].x;
     float y1 = anchors[ref].y;
     float d1 = anchors[ref].last_dist;
-    
-    // Construire le système linéaire Ax = b
-    // (n-1) équations, 2 inconnues
+
+    // Build the linear system Ax = b
+    // (n-1) equations, 2 unknowns
     int n = active_count - 1;
-    
-    // Matrices (simplifiées pour petit n)
+
+    // Matrices (simplified for small n)
     float A[MAX_ANCHORS][2];
     float b[MAX_ANCHORS];
     
@@ -238,8 +238,8 @@ position_2d_t trilaterate_2d(void) {
         b[i] = (d1 * d1 - di * di) - (x1 * x1 - xi * xi) - (y1 * y1 - yi * yi);
     }
     
-    // Résolution par pseudo-inverse (At*A)^-1 * At * b
-    // Pour 2 inconnues, calcul direct
+    // Solve by pseudo-inverse (At*A)^-1 * At * b
+    // For 2 unknowns, direct computation
     float AtA[2][2] = {{0, 0}, {0, 0}};
     float Atb[2] = {0, 0};
     
@@ -252,19 +252,19 @@ position_2d_t trilaterate_2d(void) {
         Atb[1] += A[i][1] * b[i];
     }
     
-    // Déterminant
+    // Determinant
     float det = AtA[0][0] * AtA[1][1] - AtA[0][1] * AtA[1][0];
     if (fabsf(det) < 1e-6f) {
         Serial.println("[TRILAT] Matrice singulière - ancres colinéaires ?");
         return pos;
     }
-    
-    // Inverse 2x2
+
+    // 2x2 inverse
     float inv_det = 1.0f / det;
     pos.x = inv_det * (AtA[1][1] * Atb[0] - AtA[0][1] * Atb[1]);
     pos.y = inv_det * (AtA[0][0] * Atb[1] - AtA[1][0] * Atb[0]);
-    
-    // Estimation de la précision (résidu moyen)
+
+    // Accuracy estimate (mean residual)
     float residual_sum = 0;
     for (int i = 0; i < active_count; i++) {
         int idx = active_idx[i];
@@ -281,7 +281,7 @@ position_2d_t trilaterate_2d(void) {
 }
 
 // ============================================================================
-//  ENVOI POSITION VIA WiFi (UDP)
+//  SEND POSITION VIA WiFi (UDP)
 // ============================================================================
 
 #include <WiFiUdp.h>
@@ -310,8 +310,8 @@ void wifi_init(void) {
 
 void send_position_udp(position_2d_t* pos) {
     if (!wifi_connected) return;
-    
-    // Format JSON simple
+
+    // Simple JSON format
     char json[200];
     snprintf(json, sizeof(json),
         "{\"node\":%d,\"x\":%.3f,\"y\":%.3f,\"acc\":%.3f,\"t\":%lu}",
@@ -323,18 +323,18 @@ void send_position_udp(position_2d_t* pos) {
 }
 
 // ============================================================================
-//  COMMANDES SÉRIE (pour la calibration et le debug)
+//  SERIAL COMMANDS (for calibration and debug)
 // ============================================================================
 
 /*
- * Commandes disponibles via le moniteur série :
- *   CALIB 2.00   → Lance la calibration à 2.00 m
- *   STATUS       → Affiche l'état des ancres
- *   WIFI         → Reconnecte le WiFi
+ * Commands available via the serial monitor:
+ *   CALIB 2.00   → Start calibration at 2.00 m
+ *   STATUS       → Display the anchor states
+ *   WIFI         → Reconnect WiFi
  */
 void handle_serial_commands(void) {
     if (!Serial.available()) return;
-    
+
     String cmd = Serial.readStringUntil('\n');
     cmd.trim();
     cmd.toUpperCase();

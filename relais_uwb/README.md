@@ -1,56 +1,56 @@
-# Relais UWB — UDP → SSE
+# UWB Relay — UDP → SSE
 
-Relais entre le tag UWB (ESP32) et la visualisation 3D dans le navigateur.
-Le tag envoie ses mesures en **UDP** ; le relais les rediffuse en flux **SSE**
-(Server-Sent Events) et sert la page de visualisation.
+Relay between the UWB tag (ESP32) and the 3D visualization in the browser.
+The tag sends its measurements over **UDP**; the relay rebroadcasts them as an **SSE**
+(Server-Sent Events) stream and serves the visualization page.
 
 ```
 Tag ESP32  ──UDP──►  relais.js  ──SSE──►  navigateur (visualisation 3D)
 ```
 
-## Prérequis
+## Requirements
 
-Node.js ≥ 16. **Aucune dépendance à installer** (modules natifs uniquement).
+Node.js ≥ 16. **No dependencies to install** (native modules only).
 
-## Lancement
+## Launch
 
 ```
 node relais.js
 ```
 
-Puis ouvrir **http://localhost:8090/** — la visualisation est servie par le relais
-et se connecte automatiquement au flux temps réel.
+Then open **http://localhost:8090/** — the visualization is served by the relay
+and connects automatically to the real-time stream.
 
-## Test sans matériel
+## Testing without hardware
 
-Dans un second terminal, lancer le simulateur de tag :
+In a second terminal, run the tag simulator:
 
 ```
 node simulateur_tag.js
 ```
 
-Il émet des mesures factices ; la visualisation passe en mode « EN DIRECT ».
+It emits fake measurements; the visualization switches to "LIVE" mode.
 
 ## Ports
 
-| Port | Protocole | Rôle |
+| Port | Protocol | Role |
 |------|-----------|------|
-| 8080 | UDP | datagrammes du tag : `{"tag":1,"d":[d1,d2,d3],"t":...}` |
-| 8090 | HTTP | visualisation (`/`), flux SSE (`/flux`), état (`/sante`) |
+| 8080 | UDP | tag datagrams: `{"tag":1,"d":[d1,d2,d3],"t":...}` |
+| 8090 | HTTP | visualization (`/`), SSE stream (`/flux`), state (`/sante`) |
 
-Surcharge possible : `PORT_UDP=9000 PORT_HTTP=9090 node relais.js`
+Overridable: `PORT_UDP=9000 PORT_HTTP=9090 node relais.js`
 
-## Format du message attendu
+## Expected message format
 
-Datagramme UDP, texte JSON :
+UDP datagram, JSON text:
 
 ```json
 { "tag": 1, "d": [3.21, 4.05, 3.88], "t": 1234567 }
 ```
 
-- `tag` — identifiant du tag
-- `d`   — distances mesurées vers les ancres A1, A2, A3 (mètres)
-- `t`   — horodatage du tag (`millis()`)
+- `tag` — tag identifier
+- `d`   — distances measured to anchors A1, A2, A3 (meters)
+- `t`   — tag timestamp (`millis()`)
 
-La trilatération 3D est effectuée par le navigateur. Voir
-`documentation_donnees_reelles.html` pour la chaîne complète.
+3D trilateration is performed by the browser. See
+`documentation_donnees_reelles.html` for the complete chain.

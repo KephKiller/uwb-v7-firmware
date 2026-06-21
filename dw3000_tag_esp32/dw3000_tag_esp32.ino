@@ -1,25 +1,25 @@
 /*
  * ============================================================================
- *  DW3000 UWB - TAG mobile (initiateur DS-TWR multi-ancres)
- *  ESP32-DevKitC + module DWM3000
+ *  DW3000 UWB - Mobile TAG (DS-TWR initiator, multi-anchor)
+ *  ESP32-DevKitC + DWM3000 module
  * ============================================================================
  *
- *  Sketch AUTONOME pour le TAG MOBILE. A chaque cycle, le tag interroge
- *  successivement les 3 ancres (ID 1, 2, 3), recupere les 3 distances, les
- *  lisse, puis les envoie en UDP (JSON) au relais PC.
+ *  STANDALONE sketch for the MOBILE TAG. On each cycle, the tag successively
+ *  polls the 3 anchors (ID 1, 2, 3), retrieves the 3 distances, smooths them,
+ *  then sends them over UDP (JSON) to the PC relay.
  *
- *      Tag  --DS-TWR-->  Ancres        Tag  --WiFi/UDP-->  relais_uwb/relais.js
+ *      Tag  --DS-TWR-->  Anchors       Tag  --WiFi/UDP-->  relais_uwb/relais.js
  *
- *  Le relais rediffuse en SSE ; la trilateration 3D est faite par le
- *  navigateur (visualisation_3d_positionnement.html). Voir
- *  documentation_donnees_reelles.html pour la chaine complete.
+ *  The relay rebroadcasts via SSE; 3D trilateration is done by the browser
+ *  (visualisation_3d_positionnement.html). See
+ *  documentation_donnees_reelles.html for the full pipeline.
  *
- *  >>> AVANT DE FLASHER : renseigner WIFI_SSID / WIFI_PASSWORD / RELAY_IP <<<
+ *  >>> BEFORE FLASHING: fill in WIFI_SSID / WIFI_PASSWORD / RELAY_IP <<<
  *
- *  Cablage ESP32 (voir schema_cablage_esp32.html) :
+ *  ESP32 wiring (see schema_cablage_esp32.html):
  *    GPIO18->CLK  GPIO23->MOSI  GPIO19->MISO  GPIO5->CS  GPIO27->IRQ  GPIO26->RST
  *
- *  Bibliotheque : https://github.com/Makerfabs/Makerfabs-ESP32-UWB-DW3000
+ *  Library: https://github.com/Makerfabs/Makerfabs-ESP32-UWB-DW3000
  * ============================================================================
  */
 
@@ -33,16 +33,16 @@ extern uint8_t _rst;
 extern uint8_t _irq;
 
 // ============================================================================
-//  >>> CONFIGURATION - A RENSEIGNER <<<
+//  >>> CONFIGURATION - TO FILL IN <<<
 // ============================================================================
-#define TAG_ID          1                 // Identifiant de ce tag
+#define TAG_ID          1                 // ID of this tag
 
-#define WIFI_SSID       "VOTRE_SSID"         // Reseau WiFi
-#define WIFI_PASSWORD   "VOTRE_MOT_DE_PASSE"
-#define RELAY_IP        "192.168.1.100"    // IP du PC qui execute relais.js
-#define RELAY_PORT      8080               // Port UDP du relais
+#define WIFI_SSID       "YOUR_SSID"         // WiFi network
+#define WIFI_PASSWORD   "YOUR_PASSWORD"
+#define RELAY_IP        "192.168.1.100"    // IP of the PC running relais.js
+#define RELAY_PORT      8080               // Relay UDP port
 
-// Ancres interrogees, dans l'ordre (doit correspondre a A1, A2, A3 cote visu)
+// Anchors polled, in order (must match A1, A2, A3 on the visualization side)
 static const uint8_t ANCHOR_IDS[3] = { 1, 2, 3 };
 
 // ============================================================================
@@ -56,20 +56,20 @@ static const uint8_t ANCHOR_IDS[3] = { 1, 2, 3 };
 #define PIN_RST     26
 
 // ============================================================================
-//  CONSTANTES UWB
+//  UWB CONSTANTS
 // ============================================================================
-#define TX_ANT_DLY              16385      // Delai d'antenne - A CALIBRER
+#define TX_ANT_DLY              16385      // Antenna delay - TO CALIBRATE
 #define RX_ANT_DLY              16385
 
 #define RESP_RX_TO_FINAL_TX_DLY 3500       // RESPONSE RX -> FINAL TX (us)
-#define RESP_RX_TIMEOUT         5000       // attente de la RESPONSE (us)
-#define RESULT_RX_TIMEOUT       5000       // attente du RESULT (us)
+#define RESP_RX_TIMEOUT         5000       // wait for the RESPONSE (us)
+#define RESULT_RX_TIMEOUT       5000       // wait for the RESULT (us)
 
-#define INTER_ANCRE_MS          8          // pause entre 2 ancres (ms)
-#define CYCLE_MS                25         // pause entre 2 cycles complets (ms)
+#define INTER_ANCRE_MS          8          // pause between 2 anchors (ms)
+#define CYCLE_MS                25         // pause between 2 full cycles (ms)
 
 // ============================================================================
-//  TRAMES UWB  -  l'octet [10] porte l'identifiant de l'ancre cible
+//  UWB FRAMES  -  byte [10] carries the target anchor ID
 // ============================================================================
 #define MSG_SN_IDX          2
 #define MSG_FN_IDX          9
@@ -85,13 +85,13 @@ static const uint8_t ANCHOR_IDS[3] = { 1, 2, 3 };
 #define FINAL_FINAL_TX_IDX  19
 #define RESULT_DIST_IDX     11
 
-// POLL : Tag -> Ancre
+// POLL : Tag -> Anchor
 static uint8_t tx_poll_msg[] = {
     0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E',
     FN_POLL, 0, 0, 0
 };
 
-// FINAL : Tag -> Ancre (contient les 3 timestamps du Tag)
+// FINAL : Tag -> Anchor (contains the 3 Tag timestamps)
 static uint8_t tx_final_msg[] = {
     0x41, 0x88, 0, 0xCA, 0xDE, 'W', 'A', 'V', 'E',
     FN_FINAL, 0,
@@ -108,7 +108,7 @@ static uint8_t  frame_seq_nb  = 0;
 static uint32_t cycle_count   = 0;
 
 // ============================================================================
-//  CONFIGURATION DW3000  (canal 5, 6.8 Mbps, PRF 64 MHz, STS off)
+//  DW3000 CONFIGURATION  (channel 5, 6.8 Mbps, PRF 64 MHz, STS off)
 // ============================================================================
 static dwt_config_t config = {
     5, DWT_PLEN_128, DWT_PAC8, 9, 9, 1, DWT_BR_6M8,
@@ -117,7 +117,7 @@ static dwt_config_t config = {
 };
 
 // ============================================================================
-//  FILTRE MOYENNEUR GLISSANT  (lisse les distances, 5 echantillons par ancre)
+//  SLIDING MOVING-AVERAGE FILTER  (smooths distances, 5 samples per anchor)
 // ============================================================================
 #define FILTER_SIZE 5
 
@@ -183,8 +183,8 @@ void envoyer_distances(double d0, double d1, double d2) {
 }
 
 // ============================================================================
-//  MESURE DS-TWR vers UNE ancre
-//  Retourne true si la distance a ete obtenue ; la place dans *dist_out.
+//  DS-TWR MEASUREMENT to ONE anchor
+//  Returns true if the distance was obtained; stores it in *dist_out.
 // ============================================================================
 bool mesurer_ancre(uint8_t anchor_id, double* dist_out) {
     // --- POLL ---
@@ -196,7 +196,7 @@ bool mesurer_ancre(uint8_t anchor_id, double* dist_out) {
     dwt_writetxfctrl(sizeof(tx_poll_msg), 0, 1);
     dwt_starttx(DWT_START_TX_IMMEDIATE | DWT_RESPONSE_EXPECTED);
 
-    // --- Attendre la RESPONSE ---
+    // --- Wait for the RESPONSE ---
     uint32_t status_reg = 0;
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO |
@@ -206,7 +206,7 @@ bool mesurer_ancre(uint8_t anchor_id, double* dist_out) {
     if (!(status_reg & SYS_STATUS_RXFCG_BIT_MASK)) {
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         frame_seq_nb++;
-        return false;   // ancre absente ou hors de portee
+        return false;   // anchor absent or out of range
     }
     dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_RXFCG_BIT_MASK);
 
@@ -220,7 +220,7 @@ bool mesurer_ancre(uint8_t anchor_id, double* dist_out) {
         return false;
     }
 
-    // --- FINAL : inserer les 3 timestamps du Tag ---
+    // --- FINAL : insert the 3 Tag timestamps ---
     uint64_t poll_tx_ts = get_tx_timestamp_u64();
     uint64_t resp_rx_ts = get_rx_timestamp_u64();
 
@@ -248,10 +248,10 @@ bool mesurer_ancre(uint8_t anchor_id, double* dist_out) {
     if (ret != DWT_SUCCESS) {
         dwt_setrxtimeout(RESP_RX_TIMEOUT);
         frame_seq_nb++;
-        return false;   // FINAL envoye trop tard
+        return false;   // FINAL sent too late
     }
 
-    // --- Attendre le RESULT (distance calculee par l'ancre) ---
+    // --- Wait for the RESULT (distance computed by the anchor) ---
     status_reg = 0;
     while (!((status_reg = dwt_read32bitreg(SYS_STATUS_ID)) &
              (SYS_STATUS_RXFCG_BIT_MASK | SYS_STATUS_ALL_RX_TO |
@@ -352,7 +352,7 @@ void setup() {
 }
 
 // ============================================================================
-//  LOOP - un cycle = ranging des 3 ancres + envoi UDP
+//  LOOP - one cycle = ranging of the 3 anchors + UDP send
 // ============================================================================
 void loop() {
     double d[3];
@@ -361,10 +361,10 @@ void loop() {
     for (int i = 0; i < 3; i++) {
         double brut = 0;
         if (mesurer_ancre(ANCHOR_IDS[i], &brut)) {
-            d[i]  = filter_update(&filtres[i], (float)brut);   // distance lissee
+            d[i]  = filter_update(&filtres[i], (float)brut);   // smoothed distance
             ok[i] = true;
         } else {
-            d[i]  = -1.0;                                      // ancre injoignable
+            d[i]  = -1.0;                                      // anchor unreachable
             ok[i] = false;
         }
         delay(INTER_ANCRE_MS);
@@ -372,10 +372,10 @@ void loop() {
 
     cycle_count++;
 
-    // Envoi au relais (les distances invalides valent -1 ; la visu les ignore)
+    // Send to the relay (invalid distances are -1; the visualization ignores them)
     envoyer_distances(d[0], d[1], d[2]);
 
-    // Trace serie (1 cycle sur 10)
+    // Serial trace (1 cycle out of 10)
     if (cycle_count % 10 == 1) {
         Serial.printf("[TAG #%d] cycle %lu | d1=%s d2=%s d3=%s\n",
             TAG_ID, cycle_count,
@@ -384,7 +384,7 @@ void loop() {
             ok[2] ? String(d[2], 2).c_str() : "--");
     }
 
-    // Reconnexion WiFi si la liaison est tombee
+    // WiFi reconnection if the link has dropped
     if (WiFi.status() != WL_CONNECTED) {
         wifi_ok = false;
         static uint32_t dernier_essai = 0;
