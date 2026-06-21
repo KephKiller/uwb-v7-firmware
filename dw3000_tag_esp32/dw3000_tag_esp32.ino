@@ -153,7 +153,7 @@ static WiFiUDP udp;
 static bool wifi_ok = false;
 
 void wifi_connect() {
-    Serial.printf("[TAG #%d] Connexion WiFi a %s", TAG_ID, WIFI_SSID);
+    Serial.printf("[TAG #%d] WiFi connection to %s", TAG_ID, WIFI_SSID);
     WiFi.mode(WIFI_STA);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     int t = 0;
@@ -167,7 +167,7 @@ void wifi_connect() {
         Serial.printf(" OK - IP %s\n", WiFi.localIP().toString().c_str());
     } else {
         wifi_ok = false;
-        Serial.println(" ECHEC (le tag continue le ranging sans envoi reseau)");
+        Serial.println(" FAILED (the tag keeps ranging without network send)");
     }
 }
 
@@ -291,8 +291,8 @@ void setup() {
     delay(1000);
 
     Serial.println("\n========================================");
-    Serial.println("  DW3000 UWB - TAG DS-TWR multi-ancres");
-    Serial.printf("  Tag ID : %d  |  Ancres : %d, %d, %d\n",
+    Serial.println("  DW3000 UWB - TAG DS-TWR multi-anchor");
+    Serial.printf("  Tag ID : %d  |  Anchors : %d, %d, %d\n",
                   TAG_ID, ANCHOR_IDS[0], ANCHOR_IDS[1], ANCHOR_IDS[2]);
     Serial.println("========================================\n");
 
@@ -302,7 +302,7 @@ void setup() {
     wifi_connect();
 
     // --- Init SPI + reset DW3000 ---
-    Serial.printf("[TAG #%d] Reset DW3000 + init SPI...\n", TAG_ID);
+    Serial.printf("[TAG #%d] Reset DW3000 + SPI init...\n", TAG_ID);
     pinMode(PIN_CS, OUTPUT);
     digitalWrite(PIN_CS, HIGH);
     pinMode(PIN_IRQ, INPUT);
@@ -324,21 +324,21 @@ void setup() {
         Serial.print(".");
         delay(50);
         if (++idle_retries > 40) {
-            Serial.printf("\n[TAG #%d] ERREUR: DW3000 ne passe pas en IDLE_RC\n", TAG_ID);
-            Serial.println("Verifier alim 3.3V, MISO, condensateur 100nF.");
+            Serial.printf("\n[TAG #%d] ERROR: DW3000 does not enter IDLE_RC\n", TAG_ID);
+            Serial.println("Check 3.3V supply, MISO, 100nF capacitor.");
             while (1) { delay(1000); }
         }
     }
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        Serial.printf("[TAG #%d] ERREUR: Initialisation DW3000 echouee !\n", TAG_ID);
+        Serial.printf("[TAG #%d] ERROR: DW3000 initialization failed !\n", TAG_ID);
         while (1) { delay(1000); }
     }
 
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     if (dwt_configure(&config)) {
-        Serial.printf("[TAG #%d] ERREUR: Configuration UWB echouee !\n", TAG_ID);
+        Serial.printf("[TAG #%d] ERROR: UWB configuration failed !\n", TAG_ID);
         while (1) { delay(1000); }
     }
 
@@ -348,7 +348,7 @@ void setup() {
     dwt_setrxtimeout(RESP_RX_TIMEOUT);
     dwt_setpreambledetecttimeout(0);
 
-    Serial.printf("[TAG #%d] Tag pret - debut du ranging DS-TWR\n\n", TAG_ID);
+    Serial.printf("[TAG #%d] Tag ready - starting DS-TWR ranging\n\n", TAG_ID);
 }
 
 // ============================================================================

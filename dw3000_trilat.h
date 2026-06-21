@@ -128,8 +128,8 @@ void calibrate_start(float known_distance_m) {
     calib.measured_sum = 0;
     calib.sample_count = 0;
     
-    Serial.printf("\n[CALIB] Début calibration - Distance connue: %.2f m\n", known_distance_m);
-    Serial.printf("[CALIB] Collecte de %d échantillons...\n", CALIB_SAMPLES);
+    Serial.printf("\n[CALIB] Calibration start - Known distance: %.2f m\n", known_distance_m);
+    Serial.printf("[CALIB] Collecting %d samples...\n", CALIB_SAMPLES);
 }
 
 bool calibrate_add_sample(float measured_distance) {
@@ -139,7 +139,7 @@ bool calibrate_add_sample(float measured_distance) {
     calib.sample_count++;
     
     if (calib.sample_count % 10 == 0) {
-        Serial.printf("[CALIB] %d/%d échantillons\n", calib.sample_count, CALIB_SAMPLES);
+        Serial.printf("[CALIB] %d/%d samples\n", calib.sample_count, CALIB_SAMPLES);
     }
     
     if (calib.sample_count >= CALIB_SAMPLES) {
@@ -155,14 +155,14 @@ bool calibrate_add_sample(float measured_distance) {
         int16_t adjustment = (int16_t)error_ticks;
         calib.best_delay = current_delay + adjustment;
         
-        Serial.println("\n[CALIB] ====== RÉSULTAT ======");
-        Serial.printf("[CALIB] Distance connue : %.3f m\n", calib.known_distance);
-        Serial.printf("[CALIB] Distance mesurée: %.3f m\n", avg_measured);
-        Serial.printf("[CALIB] Erreur          : %.3f m\n", error);
-        Serial.printf("[CALIB] Délai actuel    : %u\n", current_delay);
-        Serial.printf("[CALIB] Ajustement      : %d ticks\n", adjustment);
-        Serial.printf("[CALIB] >>> NOUVEAU DÉLAI : %u <<<\n", calib.best_delay);
-        Serial.println("[CALIB] Mettre à jour TX_ANT_DLY et RX_ANT_DLY dans le code");
+        Serial.println("\n[CALIB] ====== RESULT ======");
+        Serial.printf("[CALIB] Known distance   : %.3f m\n", calib.known_distance);
+        Serial.printf("[CALIB] Measured distance: %.3f m\n", avg_measured);
+        Serial.printf("[CALIB] Error            : %.3f m\n", error);
+        Serial.printf("[CALIB] Current delay    : %u\n", current_delay);
+        Serial.printf("[CALIB] Adjustment       : %d ticks\n", adjustment);
+        Serial.printf("[CALIB] >>> NEW DELAY : %u <<<\n", calib.best_delay);
+        Serial.println("[CALIB] Update TX_ANT_DLY and RX_ANT_DLY in the code");
         Serial.println("[CALIB] ========================\n");
         
         calib.running = false;
@@ -208,7 +208,7 @@ position_2d_t trilaterate_2d(void) {
     }
     
     if (active_count < MIN_ANCHORS_FOR_2D) {
-        Serial.printf("[TRILAT] Pas assez d'ancres actives: %d/%d\n", 
+        Serial.printf("[TRILAT] Not enough active anchors: %d/%d\n",
                       active_count, MIN_ANCHORS_FOR_2D);
         return pos;
     }
@@ -255,7 +255,7 @@ position_2d_t trilaterate_2d(void) {
     // Determinant
     float det = AtA[0][0] * AtA[1][1] - AtA[0][1] * AtA[1][0];
     if (fabsf(det) < 1e-6f) {
-        Serial.println("[TRILAT] Matrice singulière - ancres colinéaires ?");
+        Serial.println("[TRILAT] Singular matrix - collinear anchors?");
         return pos;
     }
 
@@ -289,7 +289,7 @@ static WiFiUDP udp;
 static bool wifi_connected = false;
 
 void wifi_init(void) {
-    Serial.printf("[WIFI] Connexion à %s", WIFI_SSID);
+    Serial.printf("[WIFI] Connecting to %s", WIFI_SSID);
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
     
     int timeout = 0;
@@ -303,7 +303,7 @@ void wifi_init(void) {
         Serial.printf(" OK! IP: %s\n", WiFi.localIP().toString().c_str());
         wifi_connected = true;
     } else {
-        Serial.println(" ÉCHEC (mode offline)");
+        Serial.println(" FAILED (offline mode)");
         wifi_connected = false;
     }
 }
@@ -344,13 +344,13 @@ void handle_serial_commands(void) {
         if (dist > 0.1 && dist < 50.0) {
             calibrate_start(dist);
         } else {
-            Serial.println("[CMD] Distance invalide (0.1 - 50.0 m)");
+            Serial.println("[CMD] Invalid distance (0.1 - 50.0 m)");
         }
     }
     else if (cmd == "STATUS") {
-        Serial.println("\n=== ÉTAT DES ANCRES ===");
+        Serial.println("\n=== ANCHOR STATES ===");
         for (int i = 0; i < num_anchors; i++) {
-            Serial.printf("  Ancre #%02X [%04X] @ (%.1f, %.1f, %.1f) | dist=%.2f m | %s | age=%lu ms\n",
+            Serial.printf("  Anchor #%02X [%04X] @ (%.1f, %.1f, %.1f) | dist=%.2f m | %s | age=%lu ms\n",
                 anchors[i].id, anchors[i].address,
                 anchors[i].x, anchors[i].y, anchors[i].z,
                 anchors[i].last_dist,
@@ -363,7 +363,7 @@ void handle_serial_commands(void) {
         wifi_init();
     }
     else {
-        Serial.println("[CMD] Commandes: CALIB <dist_m> | STATUS | WIFI");
+        Serial.println("[CMD] Commands: CALIB <dist_m> | STATUS | WIFI");
     }
 }
 

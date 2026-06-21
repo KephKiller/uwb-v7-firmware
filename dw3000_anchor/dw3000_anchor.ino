@@ -122,7 +122,7 @@ static dwt_config_t config = {
 // ============================================================================
 
 void log_msg(const char* msg) {
-    Serial.printf("[ANCRE #%d] %s\n", ANCHOR_ID, msg);
+    Serial.printf("[ANCHOR #%d] %s\n", ANCHOR_ID, msg);
 }
 
 /* DS-TWR distance computation from the 6 timestamps (cancels clock
@@ -146,8 +146,8 @@ void setup() {
     delay(1000);
 
     Serial.println("\n========================================");
-    Serial.println("  DW3000 UWB - ANCRE DS-TWR multi-ancres");
-    Serial.printf("  Identifiant de l'ancre : A%d\n", ANCHOR_ID);
+    Serial.println("  DW3000 UWB - ANCHOR DS-TWR multi-anchor");
+    Serial.printf("  Anchor identifier : A%d\n", ANCHOR_ID);
     Serial.println("========================================\n");
 
     log_msg("Reset DW3000 + init SPI...");
@@ -170,33 +170,33 @@ void setup() {
     pinMode(PIN_RST, INPUT);
     delay(10);
 
-    log_msg("Initialisation DW3000...");
+    log_msg("Initializing DW3000...");
 
     int idle_retries = 0;
     while (!dwt_checkidlerc()) {
         Serial.print(".");
         delay(50);
         if (++idle_retries > 40) {
-            log_msg("ERREUR: DW3000 ne passe pas en IDLE_RC");
-            log_msg("Verifier alim 3.3V, MISO, condensateur 100nF.");
+            log_msg("ERROR: DW3000 does not enter IDLE_RC");
+            log_msg("Check 3.3V supply, MISO, 100nF capacitor.");
             while (1) { delay(1000); }
         }
     }
     Serial.println(" OK");
 
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        log_msg("ERREUR: Initialisation DW3000 echouee !");
+        log_msg("ERROR: DW3000 initialization failed !");
         while (1) { delay(1000); }
     }
-    log_msg("DW3000 initialise avec succes");
+    log_msg("DW3000 initialized successfully");
 
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     if (dwt_configure(&config)) {
-        log_msg("ERREUR: Configuration UWB echouee !");
+        log_msg("ERROR: UWB configuration failed !");
         while (1) { delay(1000); }
     }
-    log_msg("Configuration UWB: Canal 5 | 6.8 Mbps | PRF 64 MHz");
+    log_msg("UWB configuration: Channel 5 | 6.8 Mbps | PRF 64 MHz");
 
     dwt_setrxantennadelay(RX_ANT_DLY);
     dwt_settxantennadelay(TX_ANT_DLY);
@@ -204,7 +204,7 @@ void setup() {
     // The anchor listens continuously (no timeout for the POLL)
     dwt_setrxtimeout(0);
 
-    log_msg("Ancre prete - en ecoute DS-TWR...");
+    log_msg("Anchor ready - listening DS-TWR...");
     Serial.println();
 }
 
@@ -259,7 +259,7 @@ void loop() {
 
     int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
     if (ret != DWT_SUCCESS) {
-        log_msg("Erreur: envoi RESPONSE echoue (trop tard)");
+        log_msg("Error: RESPONSE send failed (too late)");
         error_count++;
         return;
     }
@@ -306,10 +306,10 @@ void loop() {
 
     if (distance > 0 && distance < 300.0) {
         ranging_count++;
-        Serial.printf("[ANCRE #%d] Tag a %.2f m | Mesure #%lu | Erreurs: %lu\n",
+        Serial.printf("[ANCHOR #%d] Tag at %.2f m | Measurement #%lu | Errors: %lu\n",
                       ANCHOR_ID, distance, ranging_count, error_count);
     } else {
-        log_msg("Distance hors limites - ignoree");
+        log_msg("Distance out of range - ignored");
         error_count++;
         distance = -1.0;
     }

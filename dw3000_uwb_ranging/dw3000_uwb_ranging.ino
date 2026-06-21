@@ -265,7 +265,7 @@ void print_status(const char* msg) {
 
 void print_distance(double distance) {
     ranging_count++;
-    Serial.printf("[%s #%02X] Distance: %.2f m | Mesure #%lu | Erreurs: %lu\n",
+    Serial.printf("[%s #%02X] Distance: %.2f m | Measurement #%lu | Errors: %lu\n",
 #ifdef MODE_ANCHOR
                   "ANCHOR",
 #else
@@ -284,15 +284,15 @@ void setup() {
     Serial.println("\n========================================");
     Serial.println("  DW3000 UWB - DS-TWR Ranging");
 #ifdef MODE_ANCHOR
-    Serial.println("  Mode : ANCHOR (Répondeur)");
+    Serial.println("  Mode : ANCHOR (Responder)");
 #else
-    Serial.println("  Mode : TAG (Initiateur)");
+    Serial.println("  Mode : TAG (Initiator)");
 #endif
     Serial.printf("  Node ID : 0x%02X\n", NODE_ID);
     Serial.println("========================================\n");
 
     // --- Init SPI + pins (bypass spiSelect which contains DW1000 code) ---
-    print_status("Reset DW3000 + init SPI...");
+    print_status("Reset DW3000 + SPI init...");
 
     // Control pins
     pinMode(PIN_CS, OUTPUT);
@@ -317,7 +317,7 @@ void setup() {
     delay(10);  // INIT_RC transition
 
     // --- DW3000 initialization ---
-    print_status("Initialisation DW3000...");
+    print_status("DW3000 initialization...");
 
     // Wait for IDLE_RC
     int idle_retries = 0;
@@ -326,8 +326,8 @@ void setup() {
         delay(50);
         if (++idle_retries > 40) {
             Serial.println(" TIMEOUT idle_rc");
-            print_status("ERREUR: DW3000 ne passe pas en IDLE_RC");
-            print_status("Vérifier alim 3.3V, MISO, condensateur 100nF.");
+            print_status("ERROR: DW3000 does not enter IDLE_RC");
+            print_status("Check 3.3V supply, MISO, 100nF capacitor.");
             while (1) { delay(1000); }
         }
     }
@@ -335,21 +335,21 @@ void setup() {
 
     // Init (Decawave DW3000 driver — THIS is what does the real init)
     if (dwt_initialise(DWT_DW_INIT) == DWT_ERROR) {
-        print_status("ERREUR: Initialisation DW3000 échouée !");
-        print_status("Device ID lu incorrect — vérifier alim 3.3V et MISO.");
+        print_status("ERROR: DW3000 initialization failed !");
+        print_status("Device ID read incorrect — check 3.3V supply and MISO.");
         while (1) { delay(1000); }
     }
-    print_status("DW3000 initialisé avec succès");
+    print_status("DW3000 initialized successfully");
 
     // Enable the DW3000 LEDs (useful for debugging)
     dwt_setleds(DWT_LEDS_ENABLE | DWT_LEDS_INIT_BLINK);
 
     // --- UWB configuration ---
     if (dwt_configure(&config)) {
-        print_status("ERREUR: Configuration UWB échouée !");
+        print_status("ERROR: UWB configuration failed !");
         while (1) { delay(1000); }
     }
-    print_status("Configuration UWB: Canal 5 | 6.8 Mbps | PRF 64 MHz");
+    print_status("UWB configuration: Channel 5 | 6.8 Mbps | PRF 64 MHz");
 
     // --- Antenna delays ---
     dwt_setrxantennadelay(RX_ANT_DLY);
@@ -360,11 +360,11 @@ void setup() {
     // The tag waits for the response with a timeout
     dwt_setrxtimeout(RESP_RX_TIMEOUT);
     dwt_setpreambledetecttimeout(0);  // No timeout on the preamble
-    print_status("Tag prêt - Début du ranging DS-TWR");
+    print_status("Tag ready - Starting DS-TWR ranging");
 #else
     // The anchor listens continuously (no timeout for the POLL)
     dwt_setrxtimeout(0);
-    print_status("Ancre prête - En écoute DS-TWR...");
+    print_status("Anchor ready - Listening DS-TWR...");
 #endif
 
     Serial.println();
@@ -404,9 +404,9 @@ void loop() {
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         error_count++;
         if (status_reg & SYS_STATUS_ALL_RX_TO) {
-            print_status("Timeout - pas de RESPONSE de l'ancre");
+            print_status("Timeout - no RESPONSE from anchor");
         } else {
-            print_status("Erreur réception RESPONSE");
+            print_status("RESPONSE reception error");
         }
         status = STATUS_ERROR;
         frame_seq_nb++;
@@ -468,7 +468,7 @@ void loop() {
     int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
 
     if (ret != DWT_SUCCESS) {
-        print_status("Erreur: envoi FINAL échoué (trop tard)");
+        print_status("Error: FINAL send failed (too late)");
         // Restore the timeout for the next RESPONSE
         dwt_setrxtimeout(RESP_RX_TIMEOUT);
         error_count++;
@@ -511,7 +511,7 @@ void loop() {
                     print_distance(last_distance);
                     status = STATUS_RANGING_OK;
                 } else {
-                    print_status("Distance hors limites - ignorée");
+                    print_status("Distance out of bounds - ignored");
                     error_count++;
                     status = STATUS_ERROR;
                 }
@@ -591,7 +591,7 @@ void loop() {
     int ret = dwt_starttx(DWT_START_TX_DELAYED | DWT_RESPONSE_EXPECTED);
 
     if (ret != DWT_SUCCESS) {
-        print_status("Erreur: envoi RESPONSE échoué (trop tard)");
+        print_status("Error: RESPONSE send failed (too late)");
         error_count++;
         status = STATUS_ERROR;
         return;
@@ -620,9 +620,9 @@ void loop() {
         // Timeout or error on FINAL
         dwt_write32bitreg(SYS_STATUS_ID, SYS_STATUS_ALL_RX_TO | SYS_STATUS_ALL_RX_ERR);
         if (status_reg & SYS_STATUS_ALL_RX_TO) {
-            print_status("Timeout - pas de FINAL du tag");
+            print_status("Timeout - no FINAL from tag");
         } else {
-            print_status("Erreur réception FINAL");
+            print_status("FINAL reception error");
         }
         error_count++;
         status = STATUS_ERROR;
@@ -672,7 +672,7 @@ void loop() {
         print_distance(distance);
         status = STATUS_RANGING_OK;
     } else {
-        print_status("Distance hors limites - ignorée");
+        print_status("Distance out of bounds - ignored");
         error_count++;
         status = STATUS_ERROR;
     }

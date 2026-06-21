@@ -46,7 +46,7 @@ function gauss() {
 }
 
 let t = 0;
-console.log('[SIM] tag factice -> ' + HOTE + ':' + PORT + '   (Ctrl+C pour arrêter)');
+console.log('[SIM] fake tag -> ' + HOTE + ':' + PORT + '   (Ctrl+C to stop)');
 
 setInterval(() => {
   t += PERIODE_MS / 1000;
@@ -67,6 +67,6 @@ setInterval(() => {
 
   const datagramme = JSON.stringify({ tag: 1, d: d, t: Date.now() });
   sock.send(datagramme, PORT, HOTE, (err) => {
-    if (err) console.error('[SIM] erreur d\'envoi : ' + err.message);
+    if (err) console.error('[SIM] send error : ' + err.message);
   });
 }, PERIODE_MS);

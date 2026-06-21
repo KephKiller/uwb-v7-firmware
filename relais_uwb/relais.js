@@ -44,7 +44,7 @@ sock.on('message', (buf, info) => {
   try {
     msg = JSON.parse(texte);
   } catch (_) {
-    console.warn('[UDP] paquet non-JSON ignoré de ' + info.address + ' : ' + texte);
+    console.warn('[UDP] non-JSON packet ignored from ' + info.address + ' : ' + texte);
     return;
   }
   nbMessages++;
@@ -52,12 +52,12 @@ sock.on('message', (buf, info) => {
   diffuser(msg);
   if (nbMessages % 25 === 1) {     // reduced trace: 1 line out of 25
     console.log('[UDP] ' + info.address + '  ' + texte
-      + '   (' + clients.size + ' navigateur(s) connecté(s))');
+      + '   (' + clients.size + ' browser(s) connected)');
   }
 });
 
-sock.on('error', (e) => console.error('[UDP] erreur : ' + e.message));
-sock.bind(PORT_UDP, () => console.log('[UDP]  écoute des datagrammes du tag sur le port ' + PORT_UDP));
+sock.on('error', (e) => console.error('[UDP] error : ' + e.message));
+sock.bind(PORT_UDP, () => console.log('[UDP]  listening for tag datagrams on port ' + PORT_UDP));
 
 // ============================================================================
 //  HTTP server — 3D visualization + SSE stream
@@ -74,12 +74,12 @@ const serveur = http.createServer((req, res) => {
       'Access-Control-Allow-Origin' : '*',
     });
     res.write('retry: 3000\n\n');
-    res.write(': flux UWB connecté\n\n');
+    res.write(': UWB stream connected\n\n');
     clients.add(res);
-    console.log('[SSE] navigateur connecté (' + clients.size + ' au total)');
+    console.log('[SSE] browser connected (' + clients.size + ' total)');
     req.on('close', () => {
       clients.delete(res);
-      console.log('[SSE] navigateur déconnecté (' + clients.size + ' restant(s))');
+      console.log('[SSE] browser disconnected (' + clients.size + ' remaining)');
     });
     return;
   }
@@ -99,8 +99,8 @@ const serveur = http.createServer((req, res) => {
     fs.readFile(FICHIER_VISU, (err, data) => {
       if (err) {
         res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-        res.end('visualisation_3d_positionnement.html introuvable.\n'
-          + 'Le dossier relais_uwb/ doit rester à côté du fichier.');
+        res.end('visualisation_3d_positionnement.html not found.\n'
+          + 'The relais_uwb/ folder must stay next to the file.');
         return;
       }
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
@@ -110,14 +110,14 @@ const serveur = http.createServer((req, res) => {
   }
 
   res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Ressource inconnue : ' + chemin);
+  res.end('Unknown resource : ' + chemin);
 });
 
 serveur.listen(PORT_HTTP, () => {
-  console.log('[HTTP] visualisation : http://localhost:' + PORT_HTTP + '/');
-  console.log('[HTTP] flux SSE      : http://localhost:' + PORT_HTTP + '/flux');
+  console.log('[HTTP] visualization : http://localhost:' + PORT_HTTP + '/');
+  console.log('[HTTP] SSE stream     : http://localhost:' + PORT_HTTP + '/flux');
   console.log('');
-  console.log('En attente des datagrammes du tag…  (test sans matériel : node simulateur_tag.js)');
+  console.log('Waiting for tag datagrams…  (test without hardware: node simulateur_tag.js)');
 });
 
 // Periodic ping to keep the SSE connections open
